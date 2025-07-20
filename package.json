@@ -1,0 +1,22 @@
+{
+  "name": "credverse-scaffold",
+  "version": "1.0.0",
+  "description": "Starter scaffold for projects in the Credverse ecosystem",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "jest": "^29.6.1",
+    "supertest": "^6.3.3",
+    "nodemon": "^3.0.1"
+  }
+}

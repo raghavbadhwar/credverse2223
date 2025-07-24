@@ -247,6 +247,151 @@ class IPFSService {
       }
     };
   }
+
+  /**
+   * Add any file or data to IPFS
+   * @param {Buffer|string|Object} data - Data to upload (Buffer, string, or object)
+   * @param {string} fileName - Optional file name for metadata
+   * @returns {Promise<{cid: string, url: string, size: number}>}
+   */
+  async addFile(data, fileName = 'file') {
+    if (!this.client) {
+      throw new Error('IPFS client not initialized');
+    }
+
+    try {
+      let buffer;
+      
+      // Convert different data types to buffer
+      if (Buffer.isBuffer(data)) {
+        buffer = data;
+      } else if (typeof data === 'string') {
+        buffer = Buffer.from(data, 'utf8');
+      } else if (typeof data === 'object') {
+        buffer = Buffer.from(JSON.stringify(data, null, 2), 'utf8');
+      } else {
+        throw new Error('Unsupported data type. Use Buffer, string, or object.');
+      }
+
+      const result = await this.client.add(buffer, {
+        pin: true,
+        cidVersion: 1
+      });
+
+      const cid = result.cid.toString();
+      const gatewayUrl = process.env.IPFS_GATEWAY_URL || 'https://ipfs.infura.io/ipfs';
+      
+      console.log(`✅ File uploaded to IPFS: ${cid} (${buffer.length} bytes)`);
+      
+      return {
+        cid: cid,
+        url: `${gatewayUrl}/${cid}`,
+        size: buffer.length,
+        fileName: fileName
+      };
+    } catch (error) {
+      console.error('❌ Error uploading file to IPFS:', error);
+      throw new Error(`Failed to upload file to IPFS: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get file from IPFS by CID
+   * @param {string} cid - IPFS Content ID
+   * @param {Object} options - Options for retrieval
+   * @returns {Promise<Buffer>} - File content as buffer
+   */
+  async getFile(cid, options = {}) {
+    if (!this.client) {
+      throw new Error('IPFS client not initialized');
+    }
+
+    if (!cid) {
+      throw new Error('CID is required');
+    }
+
+    try {
+      const stream = this.client.cat(cid, {
+        timeout: options.timeout || 30000 // 30 seconds timeout
+      });
+
+      const chunks = [];
+      let totalSize = 0;
+      const maxSize = options.maxSize || 50 * 1024 * 1024; // 50MB default limit
+
+      for await (const chunk of stream) {
+        totalSize += chunk.length;
+        
+        if (totalSize > maxSize) {
+          throw new Error(`File too large. Maximum size: ${maxSize} bytes`);
+        }
+        
+        chunks.push(chunk);
+      }
+
+      const buffer = Buffer.concat(chunks);
+      console.log(`✅ File retrieved from IPFS: ${cid} (${buffer.length} bytes)`);
+      
+      return buffer;
+    } catch (error) {
+      console.error(`❌ Error retrieving file from IPFS (${cid}):`, error);
+      
+      if (error.message.includes('timeout')) {
+        throw new Error('IPFS request timeout. The content might not be available.');
+      } else if (error.message.includes('not found')) {
+        throw new Error('Content not found on IPFS network.');
+      } else {
+        throw new Error(`Failed to retrieve file from IPFS: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * Get file from IPFS and parse as JSON
+   * @param {string} cid - IPFS Content ID
+   * @returns {Promise<Object>} - Parsed JSON object
+   */
+  async getFileAsJson(cid) {
+    try {
+      const buffer = await this.getFile(cid);
+      const jsonString = buffer.toString('utf8');
+      return JSON.parse(jsonString);
+    } catch (error) {
+      if (error.message.includes('JSON')) {
+        throw new Error('File is not valid JSON format');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get file from IPFS and return as text
+   * @param {string} cid - IPFS Content ID
+   * @param {string} encoding - Text encoding (default: utf8)
+   * @returns {Promise<string>} - File content as text
+   */
+  async getFileAsText(cid, encoding = 'utf8') {
+    try {
+      const buffer = await this.getFile(cid);
+      return buffer.toString(encoding);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a file exists on IPFS
+   * @param {string} cid - IPFS Content ID
+   * @returns {Promise<boolean>} - True if file exists
+   */
+  async fileExists(cid) {
+    try {
+      await this.getFile(cid, { maxSize: 1 }); // Just check first byte
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

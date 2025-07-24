@@ -63,7 +63,7 @@ router.post('/upload', optionalAuth, upload.single('file'), async (req, res, nex
         uploadType = 'file';
       }
 
-      result = await ipfsService.uploadImage(buffer, originalname);
+      result = await ipfsService.addFile(buffer, originalname);
       
       res.json({
         success: true,
@@ -80,36 +80,55 @@ router.post('/upload', optionalAuth, upload.single('file'), async (req, res, nex
         message: `${uploadType === 'file' ? 'File' : 'JSON file'} uploaded to IPFS successfully`
       });
     }
-    // Case 2: JSON payload (application/json)
-    else if (req.body && Object.keys(req.body).length > 0) {
-      const jsonPayload = req.body;
+    // Case 2: JSON payload (application/json) or raw string data
+    else if (req.body !== undefined) {
       uploadType = 'json_payload';
 
-      // Validate that it's a valid object
-      if (typeof jsonPayload !== 'object' || jsonPayload === null) {
+      // Handle different types of body content
+      if (typeof req.body === 'string') {
+        // Raw string content (e.g., text/plain sent as string)
+        uploadType = 'text_data';
+        result = await ipfsService.addFile(req.body, 'data.txt');
+        
+        res.json({
+          success: true,
+          data: {
+            type: uploadType,
+            cid: result.cid,
+            url: result.url,
+            size: result.size,
+            mimetype: 'text/plain',
+            uploadedAt: new Date().toISOString(),
+            content: req.body
+          },
+          message: 'Text data uploaded to IPFS successfully'
+        });
+      } else if (typeof req.body === 'object' && req.body !== null && Object.keys(req.body).length > 0) {
+        // Valid JSON object
+        const jsonPayload = req.body;
+        
+        // Upload JSON payload directly using addFile
+        result = await ipfsService.addFile(jsonPayload, 'data.json');
+
+                      res.json({
+          success: true,
+          data: {
+            type: uploadType,
+            cid: result.cid,
+            url: result.url,
+            size: result.size,
+            mimetype: 'application/json',
+            uploadedAt: new Date().toISOString(),
+            content: jsonPayload
+          },
+          message: 'JSON payload uploaded to IPFS successfully'
+        });
+      } else {
         return res.status(400).json({
           success: false,
-          error: 'Invalid JSON payload'
+          error: 'Invalid payload. Expected non-empty JSON object or string data.'
         });
       }
-
-      // Convert JSON to buffer and upload
-      const jsonBuffer = Buffer.from(JSON.stringify(jsonPayload, null, 2));
-      result = await ipfsService.uploadImage(jsonBuffer, 'data.json');
-
-      res.json({
-        success: true,
-        data: {
-          type: uploadType,
-          cid: result.cid,
-          url: result.url,
-          size: jsonBuffer.length,
-          mimetype: 'application/json',
-          uploadedAt: new Date().toISOString(),
-          content: jsonPayload
-        },
-        message: 'JSON payload uploaded to IPFS successfully'
-      });
     }
     // Case 3: No valid input
     else {
@@ -150,41 +169,46 @@ router.get('/:cid', async (req, res, next) => {
     }
 
     try {
-      // First, try to get as JSON (for credential metadata)
-      const data = await ipfsService.getCredentialMetadata(cid);
+      // First, try to get the file using the new getFile method
+      const buffer = await ipfsService.getFile(cid);
       
-      // If successful, it's JSON data
-      if (format === 'raw') {
-        // Return raw JSON string
-        res.setHeader('Content-Type', 'application/json');
-        if (download) {
-          res.setHeader('Content-Disposition', `attachment; filename="${cid}.json"`);
-        }
-        return res.send(JSON.stringify(data, null, 2));
-      } else {
-        // Return formatted response
-        res.json({
-          success: true,
-          data: {
-            cid: cid,
-            type: 'json',
-            content: data,
-            retrievedAt: new Date().toISOString(),
-            size: JSON.stringify(data).length
-          }
-        });
-      }
-    } catch (jsonError) {
-      // If JSON parsing fails, try to get raw data
+      // Try to parse as JSON first
+      let data = null;
+      let isJson = false;
+      
       try {
-        const stream = ipfsService.client.cat(cid);
-        const chunks = [];
+        const jsonString = buffer.toString('utf8');
+        data = JSON.parse(jsonString);
+        isJson = true;
+      } catch (parseError) {
+        // Not JSON, handle as binary/text data
+        isJson = false;
+      }
 
-        for await (const chunk of stream) {
-          chunks.push(chunk);
+      if (isJson) {
+        // Handle JSON data
+        if (format === 'raw') {
+          // Return raw JSON string
+          res.setHeader('Content-Type', 'application/json');
+          if (download) {
+            res.setHeader('Content-Disposition', `attachment; filename="${cid}.json"`);
+          }
+          return res.send(JSON.stringify(data, null, 2));
+        } else {
+          // Return formatted JSON response
+          res.json({
+            success: true,
+            data: {
+              cid: cid,
+              type: 'json',
+              content: data,
+              retrievedAt: new Date().toISOString(),
+              size: buffer.length
+            }
+          });
         }
-
-        const buffer = Buffer.concat(chunks);
+      } else {
+        // Handle non-JSON data
         const contentType = detectContentType(buffer);
         
         if (format === 'raw' || download) {
@@ -210,14 +234,14 @@ router.get('/:cid', async (req, res, next) => {
             }
           });
         }
-      } catch (rawError) {
-        return res.status(404).json({
-          success: false,
-          error: 'Content not found on IPFS',
-          cid: cid,
-          details: rawError.message
-        });
       }
+    } catch (error) {
+      return res.status(404).json({
+        success: false,
+        error: 'Content not found on IPFS',
+        cid: cid,
+        details: error.message
+      });
     }
 
   } catch (error) {

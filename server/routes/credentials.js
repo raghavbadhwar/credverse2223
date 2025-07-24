@@ -4,13 +4,10 @@ const QRCode = require('qrcode');
 const { requireRole, requireInstitution } = require('../middleware/auth');
 const veramoService = require('../services/veramoService');
 const ipfsService = require('../services/ipfsService');
+const contractService = require('../services/contractService');
 const { ethers } = require('ethers');
 
 const router = express.Router();
-
-// Load contract ABI and address
-const REGISTRY_ABI = require('../contracts/CredVerseRegistry.json');
-const REGISTRY_ADDRESS = process.env.CREDVERSE_REGISTRY_ADDRESS;
 
 /**
  * @route POST /api/credentials/issue
@@ -77,35 +74,27 @@ router.post('/issue', requireInstitution, async (req, res, next) => {
     // Issue verifiable credential using Veramo
     const verifiableCredential = await veramoService.issueCredential(credentialData);
 
-    // Register credential on blockchain (if contract is deployed)
-    let blockchainTxHash = null;
-    if (REGISTRY_ADDRESS) {
+    // Upload the full VC to IPFS
+    const vcMetadata = {
+      ...metadata,
+      verifiableCredential: verifiableCredential
+    };
+    const vcIpfsResult = await ipfsService.uploadCredentialMetadata(vcMetadata);
+
+    // Register credential on blockchain
+    let blockchainResult = null;
+    if (contractService.isReady()) {
       try {
-        const provider = new ethers.JsonRpcProvider(
-          process.env.NODE_ENV === 'production' 
-            ? process.env.POLYGON_RPC_URL 
-            : process.env.MUMBAI_RPC_URL
-        );
-        
-        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-        const registry = new ethers.Contract(REGISTRY_ADDRESS, REGISTRY_ABI, wallet);
-
-        const expirationTimestamp = expirationDate 
-          ? Math.floor(new Date(expirationDate).getTime() / 1000)
-          : 0;
-
-        const tx = await registry.issueCredential(
+        blockchainResult = await contractService.issueCredential(
           credentialId,
-          studentWallet || ethers.ZeroAddress,
-          ipfsResult.cid,
+          studentWallet,
+          vcIpfsResult.cid,
           credentialType,
-          expirationTimestamp
+          expirationDate
         );
-
-        await tx.wait();
-        blockchainTxHash = tx.hash;
+        console.log('✅ Credential registered on blockchain:', blockchainResult.transactionHash);
       } catch (error) {
-        console.error('Blockchain registration failed:', error);
+        console.error('❌ Blockchain registration failed:', error);
         // Continue without blockchain registration
       }
     }
@@ -128,11 +117,13 @@ router.post('/issue', requireInstitution, async (req, res, next) => {
         credentialId,
         verifiableCredential,
         ipfs: {
-          cid: ipfsResult.cid,
-          url: ipfsResult.url
+          metadataCid: ipfsResult.cid,
+          metadataUrl: ipfsResult.url,
+          vcCid: vcIpfsResult.cid,
+          vcUrl: vcIpfsResult.url
         },
         qrCode: qrCodeDataURL,
-        blockchainTxHash,
+        blockchain: blockchainResult || null,
         studentDID: studentDID.did,
         issuerDID: institutionData.did
       },

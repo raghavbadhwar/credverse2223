@@ -1,22 +1,32 @@
 {
-  "name": "credverse-scaffold",
+  "name": "credverse-platform",
   "version": "1.0.0",
-  "description": "Starter scaffold for projects in the Credverse ecosystem",
-  "main": "index.js",
+  "description": "Decentralized credentialing platform using W3C Verifiable Credentials",
+  "main": "server/index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "jest"
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "client:dev": "cd client && npm run dev",
+    "client:build": "cd client && npm run build",
+    "client:start": "cd client && npm start",
+    "server:dev": "cd server && nodemon index.js",
+    "server:start": "cd server && node index.js",
+    "contracts:compile": "cd contracts && npx hardhat compile",
+    "contracts:test": "cd contracts && npx hardhat test",
+    "contracts:deploy": "cd contracts && npx hardhat run scripts/deploy.js",
+    "test": "jest",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install && cd ../contracts && npm install",
+    "setup": "npm run install:all"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["web3", "verifiable-credentials", "did", "blockchain", "credentials", "education"],
+  "author": "CredVerse Team",
   "license": "MIT",
-  "dependencies": {
-    "express": "^4.18.2"
-  },
   "devDependencies": {
     "jest": "^29.6.1",
     "supertest": "^6.3.3",
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "concurrently": "^8.2.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
   }
 }

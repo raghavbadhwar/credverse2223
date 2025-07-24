@@ -1,0 +1,47 @@
+{
+  "name": "credverse-server",
+  "version": "1.0.0",
+  "description": "CredVerse Backend API Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "helmet": "^7.0.0",
+    "morgan": "^1.10.0",
+    "express-rate-limit": "^6.8.1",
+    "firebase-admin": "^11.10.1",
+    "supabase": "^1.8.1",
+    "@supabase/supabase-js": "^2.26.0",
+    "@veramo/core": "^4.2.0",
+    "@veramo/credential-w3c": "^4.2.0",
+    "@veramo/data-store": "^4.2.0",
+    "@veramo/did-manager": "^4.2.0",
+    "@veramo/did-provider-ethr": "^4.2.0",
+    "@veramo/did-provider-key": "^4.2.0",
+    "@veramo/did-resolver": "^4.2.0",
+    "@veramo/key-manager": "^4.2.0",
+    "@veramo/kms-local": "^4.2.0",
+    "ethr-did-resolver": "^8.1.1",
+    "web-did-resolver": "^2.0.21",
+    "ipfs-http-client": "^60.0.1",
+    "web3": "^4.1.0",
+    "ethers": "^6.7.1",
+    "multer": "^1.4.5-lts.1",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "validator": "^13.11.0",
+    "qrcode": "^1.5.3",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.6.1",
+    "supertest": "^6.3.3",
+    "nodemon": "^3.0.1"
+  }
+}
